@@ -1,6 +1,7 @@
 #include "mirror.cpp"
 #include <iostream>
 #include <png.h>
+#include <cmath>
 
 int writeImage(const char *filename, int width, int height, const std::vector<Color> &buffer, char *title)
 {
@@ -98,7 +99,7 @@ finalise:
 
 int main(int argc, char const *argv[])
 {
-    constexpr int dim = 600;
+    constexpr int dim = 400;
 
     read_png_file("spot/spot_texture.png");
 
@@ -109,6 +110,16 @@ int main(int argc, char const *argv[])
                        png_bytep rowVals = row_pointers[row];
                        return Color{rowVals[col * 4 + 0], rowVals[col * 4 + 1], rowVals[col * 4 + 2]};
                    });
+
+    Obj rTextureCow("spot/spot_triangulated.obj", [&](const TextureTriangle &tr, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t, int depth = 0)
+                    {
+                        uint row = read_height - 1 - read_height * std::clamp(vt.v, 0.0f, 0.99f);
+                        uint col = read_width * std::clamp(vt.u, 0.0f, 0.99f);
+                        png_bytep rowVals = row_pointers[row];
+                        float sum = (ray.origin + ray.unitDir * t) * Point(1, 1, 1) * 20;
+
+                        return Color{rowVals[col * 4 + 0] / 2 + static_cast<int>(126 * std::sin(sum)), rowVals[col * 4 + 1] / 2 + static_cast<int>(126 * std::sin(sum)), rowVals[col * 4 + 2] / 2 + static_cast<int>(126 * std::sin(sum))};
+                    });
 
     Obj mirrowCow("spot/spot_triangulated.obj", [&](const TextureTriangle &tr, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t, int depth = 0)
                   {
@@ -123,9 +134,12 @@ int main(int argc, char const *argv[])
     {
         auto triangles = textureCow.setDisplacement(0, 0, 1.5).setRotation(3.1415 * i / 50, 3.1415 * i / 50, 0).getTriangles();
         auto mirrorTriangles = mirrowCow.setDisplacement(1, 0, 1.5).setRotation(3.1415 * i / 50, 3.1415 * i / 50, 0).getTriangles();
-        triangles.insert(triangles.begin(), mirrorTriangles.begin(), mirrorTriangles.end());
+        auto rtTriangles = rTextureCow.setDisplacement(1, 0, 1.5).setRotation(3.1415 * i / 50, 3.1415 * i / 50, 0).getTriangles();
+        // triangles.insert(triangles.begin(), mirrorTriangles.begin(), mirrorTriangles.end());
+        triangles.insert(triangles.begin(), rtTriangles.begin(), rtTriangles.end());
         triangles.emplace_back(std::make_shared<Mirror>(Point{1, 0, 5}, Point{-0.5, 0.2, 1}));
 
+        std::cout << "rendering" << std::endl;
         auto colors = tracer.render(triangles);
         std::string name = "out/cow" + std::to_string(i) + ".png";
         writeImage(name.c_str(), dim, dim, colors, "cow");

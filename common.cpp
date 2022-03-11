@@ -58,7 +58,7 @@ Color Ray::findColor(const std::vector<std::shared_ptr<Triangle>> &triangles, si
     std::transform(std::execution::par_unseq, triangles.begin(), triangles.end(), hitDistances.begin(), [&](const std::shared_ptr<Triangle> &triangle)
                    { return triangle->intersectionDistance(*this, triangles); });
 
-    auto closestItr = std::min_element(hitDistances.begin(), hitDistances.end(), [&](auto t1, auto t2)
+    auto closestItr = std::min_element(hitDistances.begin(), hitDistances.end(), [&](auto &t1, auto &t2)
                                        { return t1 < t2; }) -
                       hitDistances.begin() + triangles.begin();
 
