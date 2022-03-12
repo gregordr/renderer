@@ -99,11 +99,11 @@ finalise:
 
 int main(int argc, char const *argv[])
 {
-    constexpr int dim = 400;
+    constexpr int dim = 200;
 
     read_png_file("spot/spot_texture.png");
 
-    Obj textureCow("spot/spot_triangulated.obj", [&](const TextureTriangle &tr, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t, int depth = 0)
+    Obj textureCow("spot/spot_triangulated.obj", [&](const TextureTriangle &tr, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t, float u, float v, int depth = 0)
                    {
                        uint row = read_height - 1 - read_height * std::clamp(vt.v, 0.0f, 0.99f);
                        uint col = read_width * std::clamp(vt.u, 0.0f, 0.99f);
@@ -111,31 +111,36 @@ int main(int argc, char const *argv[])
                        return Color{rowVals[col * 4 + 0], rowVals[col * 4 + 1], rowVals[col * 4 + 2]};
                    });
 
-    Obj rTextureCow("spot/spot_triangulated.obj", [&](const TextureTriangle &tr, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t, int depth = 0)
+    Obj rTextureCow("spot/spot_triangulated.obj", [&](const TextureTriangle &tr, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t, float u, float v, int depth = 0)
                     {
-                        uint row = read_height - 1 - read_height * std::clamp(vt.v, 0.0f, 0.99f);
-                        uint col = read_width * std::clamp(vt.u, 0.0f, 0.99f);
-                        png_bytep rowVals = row_pointers[row];
-                        float sum = (ray.origin + ray.unitDir * t) * Point(1, 1, 1) * 20;
+                        float sum = (ray.origin + ray.unitDir * t) * Point(1, 1, 1);
+                        float sum1 = fmod(sum, 1);
+                        float sum2 = fmod(sum1 + 0.33, 1);
+                        float sum3 = fmod(sum2 + 0.33, 1);
 
-                        return Color{rowVals[col * 4 + 0] / 2 + static_cast<int>(126 * std::sin(sum)), rowVals[col * 4 + 1] / 2 + static_cast<int>(126 * std::sin(sum)), rowVals[col * 4 + 2] / 2 + static_cast<int>(126 * std::sin(sum))};
+                        return Color{std::sin(sum1 * 3.1415) * 255, std::sin(sum2 * 3.1415) * 255, std::sin(sum3 * 3.1415) * 255};
                     });
 
-    Obj mirrowCow("spot/spot_triangulated.obj", [&](const TextureTriangle &tr, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t, int depth = 0)
+    Obj mirrowCow("spot/spot_triangulated.obj", [&](const TextureTriangle &tr, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t, float u, float v, int depth = 0)
                   {
-                      const auto normal = (tr.v1.v - tr.v2.v) & (tr.v1.v - tr.v3.v);
-                      return Ray{ray.origin + ray.unitDir * t, ray.unitDir - (normal * (ray.unitDir * 2 * normal) / (normal * normal))}
-                          .findColor(triangles, depth + 1);
+                      if (depth >= 20)
+                          return Color{};
+
+                      const auto normal = (tr.v2.normal * u + tr.v3.normal * v + tr.v1.normal * (1 - u - v));
+                      auto xxx = Ray{ray.origin + ray.unitDir * t, ray.unitDir - (normal * (ray.unitDir * 2 * normal) / (normal * normal))}
+                                     .findColor(triangles, depth + 1);
+
+                      return xxx;
                   });
 
     RayTracer tracer(Point{0, 0, 0}, Point{0, 0, 3}, dim, dim);
 
     for (int i = 0; i < 1; i++)
     {
-        auto triangles = textureCow.setDisplacement(0, 0, 1.5).setRotation(3.1415 * i / 50, 3.1415 * i / 50, 0).getTriangles();
-        auto mirrorTriangles = mirrowCow.setDisplacement(1, 0, 1.5).setRotation(3.1415 * i / 50, 3.1415 * i / 50, 0).getTriangles();
+        auto triangles = textureCow.setDisplacement(-1, 0, 1.5).setRotation(3.1415 * i / 50, 3.1415 * i / 50, 0).getTriangles();
+        auto mirrorTriangles = mirrowCow.setDisplacement(0, 0, 1.5).setRotation(3.1415 * i / 50, 3.1415 * i / 50, 0).getTriangles();
         auto rtTriangles = rTextureCow.setDisplacement(1, 0, 1.5).setRotation(3.1415 * i / 50, 3.1415 * i / 50, 0).getTriangles();
-        // triangles.insert(triangles.begin(), mirrorTriangles.begin(), mirrorTriangles.end());
+        triangles.insert(triangles.begin(), mirrorTriangles.begin(), mirrorTriangles.end());
         triangles.insert(triangles.begin(), rtTriangles.begin(), rtTriangles.end());
         triangles.emplace_back(std::make_shared<Mirror>(Point{1, 0, 5}, Point{-0.5, 0.2, 1}));
 

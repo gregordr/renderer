@@ -7,9 +7,11 @@ class Triangle;
 
 struct Point
 {
+    Point();
     Point(float _x, float _y, float _z);
 
     Point operator+(const Point &other) const;
+    Point &operator+=(const Point &other);
     Point operator-(const Point &other) const;
     Point operator*(const float) const;
     float operator*(const Point &other) const;
@@ -18,6 +20,8 @@ struct Point
     Point rotateByX(const float) const;
     Point rotateByY(const float) const;
     Point rotateByZ(const float) const;
+
+    Point normal() const;
 
     float x;
     float y;
@@ -34,6 +38,11 @@ struct Color
     int g;
     int b;
 };
+
+Color operator*(const Color &lhs, const float s);
+Color operator*(const float s, const Color &lhs);
+Color operator*(const Color &lhs, const int s);
+Color operator*(const int s, const Color &lhs);
 
 struct Ray
 {

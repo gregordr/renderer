@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
+#include <unordered_map>
 
 #include "common.hpp"
 #include "readPng.cpp"
@@ -28,37 +29,40 @@ struct TriangleVertex
         float v;
     };
 
-    TriangleVertex(Point _v, VertexTexture _vt) : v(_v), vt(_vt) {}
+    TriangleVertex(Point _v, VertexTexture _vt, Point _normal) : v(_v), vt(_vt), normal(_normal) {}
 
     TriangleVertex operator+(const Point &other) const
     {
-        return {v + other, vt};
+        return {v + other, vt, normal};
     }
 
     TriangleVertex operator*(float val) const
     {
-        return {v * val, vt * val};
+        return {v * val, vt * val, normal};
     }
 
     TriangleVertex operator+(const TriangleVertex &other) const
     {
-        return {v + other.v, vt + other.vt};
+        return {v + other.v, vt + other.vt, normal};
     }
 
     Point v;
+    Point normal;
     VertexTexture vt;
 };
 
 class TextureTriangle;
 
-using ColorFunction = std::function<Color(const TextureTriangle &, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t)>;
+using ColorFunction = std::function<Color(const TextureTriangle &, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t, float u, float v, int depth)>;
 
 class TextureTriangle : public Triangle
 {
 public:
     TextureTriangle(TriangleVertex _v1,
                     TriangleVertex _v2,
-                    TriangleVertex _v3, ColorFunction _colorFunction) : v1(_v1), v2(_v2), v3(_v3), colorFunction(_colorFunction) {}
+                    TriangleVertex _v3, ColorFunction _colorFunction) : v1(_v1), v2(_v2), v3(_v3), colorFunction(_colorFunction)
+    {
+    }
 
     TextureTriangle operator+(const Point &other) const
     {
@@ -67,7 +71,7 @@ public:
 
     TextureTriangle rotate(float a, float b, float c) const
     {
-        return {{v1.v.rotateByX(a).rotateByY(b).rotateByZ(c), v1.vt}, {v2.v.rotateByX(a).rotateByY(b).rotateByZ(c), v2.vt}, {v3.v.rotateByX(a).rotateByY(b).rotateByZ(c), v3.vt}, colorFunction};
+        return {{v1.v.rotateByX(a).rotateByY(b).rotateByZ(c), v1.vt, v1.normal.rotateByX(a).rotateByY(b).rotateByZ(c)}, {v2.v.rotateByX(a).rotateByY(b).rotateByZ(c), v2.vt, v2.normal.rotateByX(a).rotateByY(b).rotateByZ(c)}, {v3.v.rotateByX(a).rotateByY(b).rotateByZ(c), v3.vt, v3.normal.rotateByX(a).rotateByY(b).rotateByZ(c)}, colorFunction};
     }
 
     Color intersect(const Ray &ray, const std::vector<std::shared_ptr<Triangle>> &triangles, size_t depth = 0) const
@@ -85,7 +89,7 @@ public:
         bool hit = (det >= 1e-6 && t >= 0.0 && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0);
 
         auto hitPoint = (v2 * u + v3 * v + v1 * (1 - u - v));
-        return hit ? colorFunction(*this, hitPoint.vt, row_pointers, triangles, ray, t) : Color{static_cast<int>(255 * ray.unitDir.y * 0.5f + 255 * 0.5f), static_cast<int>(255 * 0.7f + ray.unitDir.y * 255 * 0.3f), 255};
+        return hit ? colorFunction(*this, hitPoint.vt, row_pointers, triangles, ray, t, u, v, depth) : Color{static_cast<int>(255 * ray.unitDir.y * 0.5f + 255 * 0.5f), static_cast<int>(255 * 0.7f + ray.unitDir.y * 255 * 0.3f), 255};
     }
 
     float intersectionDistance(const Ray &ray, const std::vector<std::shared_ptr<Triangle>> &triangles, size_t depth = 0) const
@@ -100,7 +104,7 @@ public:
         float u = E2 * DAO * invdet;
         float v = -(E1 * DAO * invdet);
         float t = AO * N * invdet;
-        bool hit = (det >= 1e-6 && t >= 0.0 && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0);
+        bool hit = (det >= 1e-6 && t >= 1e-6 && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0);
         return hit ? t : std::numeric_limits<float>::infinity();
     }
 
@@ -125,9 +129,11 @@ class Obj
 public:
     Obj(std::string path, ColorFunction _colorFunction) : colorFunction(_colorFunction)
     {
+        std::unordered_map<size_t, std::vector<size_t>> vertexToFaces;
+        std::unordered_map<size_t, Point> vertexToNormal;
+        std::vector<std::tuple<std::pair<int, int>, std::pair<int, int>, std::pair<int, int>>> f;
 
         std::ifstream infile(path);
-
         for (std::string line; getline(infile, line);)
         {
             std::istringstream ss(line);
@@ -164,16 +170,47 @@ public:
                 ss >> word;
                 auto [v3, vt3] = split(word);
 
-                triangles.emplace_back(TriangleVertex{vertices.at(v1 - 1), vertexTextures.at(vt1 - 1)}, TriangleVertex{vertices.at(v2 - 1), vertexTextures.at(vt2 - 1)}, TriangleVertex{vertices.at(v3 - 1), vertexTextures.at(vt3 - 1)}, colorFunction);
+                vertexToFaces[v1 - 1].push_back(f.size());
+                vertexToFaces[v2 - 1].push_back(f.size());
+                vertexToFaces[v3 - 1].push_back(f.size());
+
+                f.emplace_back(std::make_pair(v1 - 1, vt1 - 1), std::make_pair(v2 - 1, vt2 - 1), std::make_pair(v3 - 1, vt3 - 1));
             }
             else
             {
                 throw "Invalid Obj file";
             }
         }
+
+        // set normals
+        for (const auto &[v, fcs] : vertexToFaces)
+        {
+            int n = fcs.size();
+            for (const auto &fc : fcs)
+            {
+                const auto &v1 = vertices.at(std::get<0>(std::get<0>(f[fc])));
+                const auto &v2 = vertices.at(std::get<0>(std::get<1>(f[fc])));
+                const auto &v3 = vertices.at(std::get<0>(std::get<2>(f[fc])));
+                auto normal = ((v2 - v1) & (v3 - v1)).normal();
+
+                vertexToNormal[v] += normal / n;
+            }
+        }
+
+        for (const auto &fc : f)
+        {
+            const auto &[vp1, vp2, vp3] = fc;
+            const auto &[v1, vt1] = vp1;
+            const auto &[v2, vt2] = vp2;
+            const auto &[v3, vt3] = vp3;
+            triangles.emplace_back(
+                TriangleVertex{vertices.at(v1), vertexTextures.at(vt1), vertexToNormal.at(v1)},
+                TriangleVertex{vertices.at(v2), vertexTextures.at(vt2), vertexToNormal.at(v2)}, TriangleVertex{vertices.at(v3), vertexTextures.at(vt3), vertexToNormal.at(v3)}, colorFunction);
+        }
     }
 
-    Obj setDisplacement(float x, float y, float z)
+    Obj
+    setDisplacement(float x, float y, float z)
     {
         displacement = {x, y, z};
         return *this;
