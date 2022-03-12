@@ -8,10 +8,10 @@ public:
     virtual Color intersect(const Ray &ray, const std::vector<std::shared_ptr<Triangle>> &triangles, size_t depth = 0) const
     {
         float denom = normal * (ray.unitDir);
-        if (abs(denom) > 0.0001f)
+        if (abs(denom) > 0.001f)
         {
             float t = (origin - ray.origin) * (normal) / denom;
-            if (t >= 0.0001f)
+            if (t >= 0.001f)
                 return Ray{ray.origin + ray.unitDir * t, ray.unitDir - (normal * (ray.unitDir * 2 * normal) / (normal * normal))}
                     .findColor(triangles, depth + 1);
         }
