@@ -1,2 +1,2 @@
-a.out: *.cpp *.hpp
-	g++ *.cpp -std=c++2a -lpng -ltbb
+a.out: *.cpp *.hpp Makefile
+	g++ *.cpp -std=c++2a -lpng -ltbb -O3

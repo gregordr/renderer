@@ -63,6 +63,11 @@ Point Point::normal() const
     return *this / std::sqrt(*this * *this);
 }
 
+Point::operator BvhVector3() const
+{
+    return {x, y, z};
+}
+
 Color::Color(int _r, int _g, int _b) : r(_r), g(_g), b(_b) {}
 Color::Color() : r(0), g(0), b(0) {}
 
@@ -85,15 +90,7 @@ Color operator*(const int s, const Color &lhs)
 
 Ray::Ray(const Point &_orig, const Point &_dir) : origin(_orig), unitDir(_dir / std::sqrt(_dir * _dir)) {}
 
-Color Ray::findColor(const std::vector<std::shared_ptr<Triangle>> &triangles, size_t depth)
+Ray::operator BvhRay() const
 {
-    std::vector<float> hitDistances(triangles.size());
-
-    std::transform(std::execution::par_unseq, triangles.begin(), triangles.end(), hitDistances.begin(), [&](const std::shared_ptr<Triangle> triangle)
-                   { return triangle->intersectionDistance(*this, triangles, depth); });
-    auto closestItr = std::min_element(hitDistances.begin(), hitDistances.end(), [&](auto &t1, auto &t2)
-                                       { return t1 < t2; }) -
-                      hitDistances.begin() + triangles.begin();
-
-    return closestItr->get()->intersect(*this, triangles, depth);
+    return BvhRay(origin, unitDir, 0.01, 30000);
 }

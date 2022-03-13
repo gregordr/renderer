@@ -1,12 +1,14 @@
-#include "rayTracer.cpp"
+#include "bvh/triangle.hpp"
 
-class Mirror : public Triangle
+class Mirror
 {
 public:
     Mirror(Point _origin, Point _normal) : origin(_origin), normal(_normal) {}
 
-    virtual Color intersect(const Ray &ray, const std::vector<std::shared_ptr<Triangle>> &triangles, size_t depth = 0) const
+    virtual Color intersect(const Ray &ray, const std::vector<Triangle> &triangles, size_t depth = 0) const
     {
+        if(depth > 5)
+            return Color{0,0,0};
         float denom = normal * (ray.unitDir);
         if (abs(denom) > 0.001f)
         {
@@ -18,7 +20,7 @@ public:
         return Color{static_cast<int>(255 * ray.unitDir.y * 0.5f + 255 * 0.5f), static_cast<int>(255 * 0.7f + ray.unitDir.y * 255 * 0.3f), 255};
     }
 
-    virtual float intersectionDistance(const Ray &ray, const std::vector<std::shared_ptr<Triangle>> &triangles, size_t depth = 0) const
+    virtual float intersectionDistance(const Ray &ray, const std::vector<Triangle> &triangles, size_t depth = 0) const
     {
         float denom = normal * (ray.unitDir);
         if (abs(denom) > 0.001f)

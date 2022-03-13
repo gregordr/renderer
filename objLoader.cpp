@@ -8,121 +8,6 @@
 #include <unordered_map>
 
 #include "common.hpp"
-#include "readPng.cpp"
-
-struct TriangleVertex
-{
-    struct VertexTexture
-    {
-        VertexTexture(float _u, float _v) : u(_u), v(_v) {}
-
-        VertexTexture operator*(float val) const
-        {
-            return {u * val, v * val};
-        }
-        VertexTexture operator+(const VertexTexture &other) const
-        {
-            return {u + other.u, v + other.v};
-        }
-
-        float u;
-        float v;
-    };
-
-    TriangleVertex(Point _v, VertexTexture _vt, Point _normal) : v(_v), vt(_vt), normal(_normal) {}
-
-    TriangleVertex operator+(const Point &other) const
-    {
-        return {v + other, vt, normal};
-    }
-
-    TriangleVertex operator*(float val) const
-    {
-        return {v * val, vt * val, normal};
-    }
-
-    TriangleVertex operator+(const TriangleVertex &other) const
-    {
-        return {v + other.v, vt + other.vt, normal};
-    }
-
-    Point v;
-    Point normal;
-    VertexTexture vt;
-};
-
-class TextureTriangle;
-
-using ColorFunction = std::function<Color(const TextureTriangle &, const TriangleVertex::VertexTexture &vt, png_bytep *, const std::vector<std::shared_ptr<Triangle>> &triangles, const Ray &ray, float t, float u, float v, int depth)>;
-
-class TextureTriangle : public Triangle
-{
-public:
-    TextureTriangle(TriangleVertex _v1,
-                    TriangleVertex _v2,
-                    TriangleVertex _v3, ColorFunction _colorFunction) : v1(_v1), v2(_v2), v3(_v3), colorFunction(_colorFunction)
-    {
-    }
-
-    TextureTriangle operator+(const Point &other) const
-    {
-        return {v1 + other, v2 + other, v3 + other, colorFunction};
-    }
-
-    TextureTriangle rotate(float a, float b, float c) const
-    {
-        return {{v1.v.rotateByX(a).rotateByY(b).rotateByZ(c), v1.vt, v1.normal.rotateByX(a).rotateByY(b).rotateByZ(c)}, {v2.v.rotateByX(a).rotateByY(b).rotateByZ(c), v2.vt, v2.normal.rotateByX(a).rotateByY(b).rotateByZ(c)}, {v3.v.rotateByX(a).rotateByY(b).rotateByZ(c), v3.vt, v3.normal.rotateByX(a).rotateByY(b).rotateByZ(c)}, colorFunction};
-    }
-
-    Color intersect(const Ray &ray, const std::vector<std::shared_ptr<Triangle>> &triangles, size_t depth = 0) const
-    {
-        auto E1 = v2.v - v1.v;
-        auto E2 = v3.v - v1.v;
-        auto N = E1 & E2;
-        float det = -(ray.unitDir * N);
-        float invdet = 1.0 / det;
-        auto AO = ray.origin - v1.v;
-        auto DAO = AO & ray.unitDir;
-        float u = E2 * DAO * invdet;
-        float v = -(E1 * DAO * invdet);
-        float t = AO * N * invdet;
-        bool hit = (det >= 1e-6 && t >= 0.0 && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0);
-
-        auto hitPoint = (v2 * u + v3 * v + v1 * (1 - u - v));
-        return hit ? colorFunction(*this, hitPoint.vt, row_pointers, triangles, ray, t, u, v, depth) : Color{static_cast<int>(255 * ray.unitDir.y * 0.5f + 255 * 0.5f), static_cast<int>(255 * 0.7f + ray.unitDir.y * 255 * 0.3f), 255};
-    }
-
-    float intersectionDistance(const Ray &ray, const std::vector<std::shared_ptr<Triangle>> &triangles, size_t depth = 0) const
-    {
-        auto E1 = v2.v - v1.v;
-        auto E2 = v3.v - v1.v;
-        auto N = E1 & E2;
-        float det = -(ray.unitDir * N);
-        float invdet = 1.0 / det;
-        auto AO = ray.origin - v1.v;
-        auto DAO = AO & ray.unitDir;
-        float u = E2 * DAO * invdet;
-        float v = -(E1 * DAO * invdet);
-        float t = AO * N * invdet;
-        bool hit = (det >= 1e-6 && t >= 1e-6 && u >= 0.0 && v >= 0.0 && (u + v) <= 1.0);
-        return hit ? t : std::numeric_limits<float>::infinity();
-    }
-
-    TriangleVertex v1;
-    TriangleVertex v2;
-    TriangleVertex v3;
-
-private:
-    Color getColor(const TriangleVertex::VertexTexture &vt) const
-    {
-        uint row = read_height - 1 - read_height * std::clamp(vt.v, 0.0f, 0.99f);
-        uint col = read_width * std::clamp(vt.u, 0.0f, 0.99f);
-        png_bytep rowVals = row_pointers[row];
-        return Color{rowVals[col * 4 + 0], rowVals[col * 4 + 1], rowVals[col * 4 + 2]};
-    }
-
-    ColorFunction colorFunction;
-};
 
 class Obj
 {
@@ -238,12 +123,12 @@ public:
         };
     }
 
-    std::vector<std::shared_ptr<Triangle>>
+    std::vector<Triangle>
     getTriangles() const
     {
-        std::vector<std::shared_ptr<Triangle>> output;
+        std::vector<Triangle> output;
         std::transform(triangles.begin(), triangles.end(), std::back_inserter(output), [&](auto &triangle)
-                       { return std::make_shared<TextureTriangle>(triangle.rotate(rotationX, rotationY, rotationZ) + displacement); });
+                       { return triangle.rotate(rotationX, rotationY, rotationZ) + displacement; });
         return output;
     }
 
@@ -252,7 +137,7 @@ private:
     std::vector<Point>
         vertices;
     std::vector<TriangleVertex::VertexTexture> vertexTextures;
-    std::vector<TextureTriangle> triangles;
+    std::vector<Triangle> triangles;
 
     Point displacement = {0, 0, 0};
     float rotationX = 0;
