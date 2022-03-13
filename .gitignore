@@ -4,3 +4,4 @@ main
 libpng/*
 libpng-1.6.37
 out/*
+bvh/*.gch
